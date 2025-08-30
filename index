@@ -1,0 +1,20 @@
+
+# index.html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>プログラミング学習記録</title>
+    <meta charset="UTF-8">
+</head>
+<body>
+    <h1>プログラミング学習記録</h1>
+    <p>Python、Web開発、データ分析の学習記録を公開しています。</p>
+    <h2>学習内容</h2>
+    <ul>
+        <li>Python基礎</li>
+        <li>Webスクレイピング</li>
+        <li>データ分析</li>
+        <li>API開発</li>
+    </ul>
+</body>
+</html>
