@@ -1,0 +1,9 @@
+# Fish Audio API設定
+# https://api.fish-audio.com から取得したAPIキーを設定してください
+FISH_AUDIO_API_KEY=your_fish_audio_api_key_here
+
+# Flask設定
+FLASK_SECRET_KEY=your_secret_key_here
+FLASK_ENV=development
+
+

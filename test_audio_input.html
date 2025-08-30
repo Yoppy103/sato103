@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>音声入力テスト</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+        }
+        .button:hover {
+            background: #0056b3;
+        }
+        .button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        .audio-display {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        #transcription {
+            min-height: 100px;
+            background: white;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 音声入力テスト</h1>
+        
+        <div class="status info" id="status">
+            マイクの権限を確認中...
+        </div>
+        
+        <div>
+            <button class="button" id="startBtn">🎤 録音開始</button>
+            <button class="button" id="stopBtn" disabled>⏹️ 録音停止</button>
+        </div>
+        
+        <div class="audio-display">
+            <h3>音声認識結果:</h3>
+            <div id="transcription">音声を録音してください...</div>
+        </div>
+        
+        <div class="audio-display">
+            <h3>録音された音声:</h3>
+            <audio id="audioPlayer" controls></audio>
+        </div>
+        
+        <div class="audio-display">
+            <h3>デバッグ情報:</h3>
+            <div id="debug"></div>
+        </div>
+    </div>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+        
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const status = document.getElementById('status');
+        const transcription = document.getElementById('transcription');
+        const audioPlayer = document.getElementById('audioPlayer');
+        const debug = document.getElementById('debug');
+        
+        // デバッグ情報を表示
+        function log(message) {
+            console.log(message);
+            debug.innerHTML += `<div>${new Date().toLocaleTimeString()}: ${message}</div>`;
+        }
+        
+        // マイクの権限確認
+        async function checkMicrophonePermission() {
+            try {
+                log('🎤 マイクの権限を確認中...');
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                log('✅ マイクの権限が許可されました');
+                status.className = 'status success';
+                status.textContent = '✅ マイクの権限が許可されました';
+                stream.getTracks().forEach(track => track.stop());
+                return true;
+            } catch (error) {
+                log(`❌ マイクの権限エラー: ${error.message}`);
+                status.className = 'status error';
+                status.textContent = `❌ マイクの権限エラー: ${error.message}`;
+                return false;
+            }
+        }
+        
+        // 録音開始
+        async function startRecording() {
+            try {
+                log('🎤 録音開始...');
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    audioChunks.push(event.data);
+                    log(`📦 音声データ受信: ${event.data.size} bytes`);
+                };
+                
+                mediaRecorder.onstop = () => {
+                    log('⏹️ 録音停止');
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    audioPlayer.src = audioUrl;
+                    
+                    // 音声データをBase64に変換
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        const base64Audio = reader.result.split(',')[1];
+                        log(`🔢 Base64変換完了: ${base64Audio.substring(0, 50)}...`);
+                        
+                        // 音声認識のシミュレーション（実際のAPIは呼び出さない）
+                        simulateSpeechRecognition(base64Audio);
+                    };
+                    reader.readAsDataURL(audioBlob);
+                };
+                
+                mediaRecorder.start();
+                isRecording = true;
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                
+                status.className = 'status info';
+                status.textContent = '🎤 録音中...';
+                log('✅ 録音開始成功');
+                
+            } catch (error) {
+                log(`❌ 録音開始エラー: ${error.message}`);
+                status.className = 'status error';
+                status.textContent = `❌ 録音開始エラー: ${error.message}`;
+            }
+        }
+        
+        // 録音停止
+        function stopRecording() {
+            if (mediaRecorder && isRecording) {
+                mediaRecorder.stop();
+                isRecording = false;
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                
+                status.className = 'status info';
+                status.textContent = '⏹️ 録音停止中...';
+                
+                // ストリームを停止
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+            }
+        }
+        
+        // 音声認識のシミュレーション
+        function simulateSpeechRecognition(base64Audio) {
+            log('🤖 音声認識処理中...');
+            
+            // 実際のAPI呼び出しの代わりにシミュレーション
+            setTimeout(() => {
+                const mockTranscription = "これはテスト用の音声認識結果です。実際のAPIでは、Fish Audio APIが音声をテキストに変換します。";
+                transcription.textContent = mockTranscription;
+                log(`📝 音声認識完了: ${mockTranscription}`);
+                
+                status.className = 'status success';
+                status.textContent = '✅ 音声認識完了';
+            }, 2000);
+        }
+        
+        // イベントリスナー
+        startBtn.addEventListener('click', startRecording);
+        stopBtn.addEventListener('click', stopRecording);
+        
+        // 初期化
+        checkMicrophonePermission();
+        
+        log('🚀 音声入力テストページが読み込まれました');
+    </script>
+</body>
+</html>
+
+
+

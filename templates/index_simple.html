@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>シンプル会話デモ</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif; background:#f7f7fb; margin:0; }
+        .container { max-width: 760px; margin: 24px auto; background:#fff; border:1px solid #e5e7eb; border-radius: 10px; padding:16px; }
+        h1 { font-size: 18px; margin: 0 0 12px; }
+        .row { display:flex; gap:8px; align-items:center; }
+        textarea { width:100%; height:100px; padding:10px; border:1px solid #e5e7eb; border-radius:8px; font-size:14px; }
+        select, input[type=text] { padding:8px; border:1px solid #e5e7eb; border-radius:8px; }
+        button { background:#2563eb; color:#fff; border:0; border-radius:8px; padding:10px 14px; cursor:pointer; }
+        .log { font-size: 12px; color:#6b7280; margin-top: 8px; }
+        .messages { border:1px solid #e5e7eb; border-radius:8px; padding:10px; height:200px; overflow:auto; background:#fafafa; margin-top:10px; }
+        .msg { margin:4px 0; }
+        .msg.user { color:#111827; }
+        .msg.ai { color:#1d4ed8; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>シンプル会話デモ</h1>
+
+        <div class="row" style="margin-bottom:8px;">
+            <label>音声モデル:</label>
+            <select id="voice">
+                <option value="japanese-female-1" selected>日本語（女性1）</option>
+                <option value="japanese-male-1">日本語（男性1）</option>
+                <option value="english-female-1">英語（女性1）</option>
+            </select>
+        </div>
+
+        <textarea id="input" placeholder="ここにメッセージを入力"></textarea>
+        <div class="row" style="margin-top:8px;">
+            <button id="startConv">会話開始</button>
+            <button id="stopConv" style="background:#ef4444">停止</button>
+            <span id="status" class="log"></span>
+        </div>
+
+        <div class="messages" id="messages"></div>
+
+        <audio id="player" controls style="margin-top:12px; width:100%"></audio>
+    </div>
+
+    <script>
+        const input = document.getElementById('input');
+        const statusEl = document.getElementById('status');
+        const startBtn = document.getElementById('startConv');
+        const stopBtn = document.getElementById('stopConv');
+        const voiceSel = document.getElementById('voice');
+        const player = document.getElementById('player');
+        const messages = document.getElementById('messages');
+        let isRecording = false;
+        let autoConversation = true;
+        let hasStartedConversation = false; // 「もしもし」検出後にtrue
+        let currentStream = null;
+        let currentMediaRecorder = null;
+        const opener = `こんにちは。\n私、X商事の高木と申します。\n\n突然のお電話失礼いたします。\n弊社では、主に弁当店様向けにお米の販売を行っておりまして、今日はその中でもおすすめの商品をご紹介させていただければと思い、ご連絡いたしました。\n\n現在ご好評いただいているのが、\n「近江ブレンド米・小粒タイプ」という商品で、\n1kgあたり588円（税別・送料込み）でご提供しております。\n\nこのお米は、粒が通常より一回り小さいのが特徴で、\n弁当箱に詰めやすく、見た目のボリューム感が出しやすいと好評です。\n\nもしご興味があれば、無料サンプルをお届けさせていただいておりますので、\nよろしければ、お店のお名前・ご住所・ご担当者様のお名前をお教えいただけますでしょうか？`;
+
+        function addMsg(text, cls) {
+            const div = document.createElement('div');
+            div.className = 'msg ' + cls;
+            div.textContent = (cls === 'user' ? 'あなた: ' : 'AI: ') + text;
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        async function postJson(url, payload) {
+            const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const text = await res.text();
+            try { return JSON.parse(text); } catch (e) { throw new Error('サーバ応答が不正です: ' + text.slice(0,200)); }
+        }
+
+        window.addEventListener('load', async () => {
+            statusEl.textContent = '「会話開始」を押すとマイクが有効になり、会話を開始します。';
+        });
+
+        async function postFile(url, file) {
+            const fd = new FormData();
+            fd.append('file', file);
+            const res = await fetch(url, { method: 'POST', body: fd });
+            const text = await res.text();
+            try { return JSON.parse(text); } catch (e) { throw new Error('サーバ応答が不正です: ' + text.slice(0,200)); }
+        }
+
+        async function sendText() {
+            const text = input.value.trim();
+            if (!text) return;
+            addMsg(text, 'user');
+            input.value = '';
+            statusEl.textContent = '送信中...';
+            try {
+                const data = await postJson('/text', { text, voice_id: voiceSel.value });
+                if (data && data.ok) {
+                    addMsg(data.text, 'ai');
+                    if (data.audio) {
+                        const mime = data.format === 'mp3' ? 'audio/mpeg' : data.format === 'wav' ? 'audio/wav' : 'audio/mpeg';
+                        const blob = b64ToBlob(data.audio, mime);
+                        if (player.src) { try { URL.revokeObjectURL(player.src); } catch (e) {} }
+                        player.src = URL.createObjectURL(blob);
+                        player.load();
+                        player.play().catch(()=>{});
+                        const bytes = estimateBytes(data.audio);
+                        statusEl.textContent = `形式: ${data.format} / サイズ(推定): ${bytes} bytes`;
+                    }
+                } else {
+                    statusEl.textContent = 'エラー: ' + (data && data.error ? data.error : '不明');
+                }
+            } catch (e) {
+                statusEl.textContent = '送信失敗: ' + e.message;
+            }
+        }
+
+        function b64ToBlob(b64Data, contentType = '', sliceSize = 512) {
+            let normalized = (b64Data || '').replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+            const padding = normalized.length % 4;
+            if (padding === 2) normalized += '==';
+            else if (padding === 3) normalized += '=';
+            const byteCharacters = atob(normalized);
+            const byteArrays = [];
+            for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+                const slice = byteCharacters.slice(offset, offset + sliceSize);
+                const byteNumbers = new Array(slice.length);
+                for (let i = 0; i < slice.length; i++) byteNumbers[i] = slice.charCodeAt(i);
+                byteArrays.push(new Uint8Array(byteNumbers));
+            }
+            return new Blob(byteArrays, { type: contentType });
+        }
+
+        function estimateBytes(b64Data) {
+            let normalized = (b64Data || '').replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+            const padding = normalized.endsWith('==') ? 2 : (normalized.endsWith('=') ? 1 : 0);
+            return Math.floor(normalized.length * 3 / 4) - padding;
+        }
+
+        async function recordAndTranscribe() {
+            try {
+                if (isRecording) return;
+                isRecording = true;
+                statusEl.textContent = '録音開始...';
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                currentStream = stream;
+                const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
+                // 約4秒録音、160kbps
+                const mr = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 160000 });
+                currentMediaRecorder = mr;
+                const chunks = [];
+                mr.addEventListener('dataavailable', e => { if (e.data && e.data.size > 0) chunks.push(e.data); });
+                await new Promise(resolve => { mr.addEventListener('stop', resolve, { once: true }); mr.start(250); setTimeout(()=>{ try { mr.stop(); } catch(_){} }, 4000); });
+                stream.getTracks().forEach(t => t.stop());
+                currentStream = null;
+                currentMediaRecorder = null;
+                const blob = new Blob(chunks, { type: mime.includes('opus') ? 'audio/webm' : mime });
+                statusEl.textContent = '音声送信中...';
+                const data = await postFile('/stt', new File([blob], 'rec.webm', { type: 'audio/webm' }));
+                if (data && data.ok) {
+                    addMsg(data.text, 'user');
+                    // まだ会話を開始していない場合は、開始合図かチェック
+                    if (!hasStartedConversation) {
+                        const t = (data.text || '').trim();
+                        const isStart = /もしもし|モシモシ|ﾓｼﾓｼ|はい|ハイ/i.test(t);
+                        if (isStart) {
+                            hasStartedConversation = true;
+                            statusEl.textContent = '開始合図を検出 → オープナー発話';
+                            try {
+                                // 静的ファイルを優先し、失敗時のみAPIを叩く
+                                try {
+                                    if (player.src) { try { URL.revokeObjectURL(player.src); } catch (e) {} }
+                                    player.src = '/static/opener.mp3';
+                                    player.load();
+                                    addMsg(opener, 'ai');
+                                    await player.play();
+                                } catch (_) {
+                                    const open = await postJson('/tts', { text: opener, use_opener_cache: true });
+                                    if (open && open.ok && open.audio) {
+                                        addMsg(opener, 'ai');
+                                        const mimeType = open.format === 'mp3' ? 'audio/mpeg' : open.format === 'wav' ? 'audio/wav' : 'audio/mpeg';
+                                        const aBlob = b64ToBlob(open.audio, mimeType);
+                                        if (player.src) { try { URL.revokeObjectURL(player.src); } catch (e) {} }
+                                        player.src = URL.createObjectURL(aBlob);
+                                        player.load();
+                                        await player.play().catch(()=>{});
+                                    }
+                                }
+                                statusEl.textContent = '発話中...';
+                            } catch (e) {
+                                console.error(e);
+                            }
+                        } else {
+                            statusEl.textContent = '開始合図待機中...（「もしもし」などを話してください）';
+                            if (autoConversation) setTimeout(() => { recordAndTranscribe(); }, 600);
+                        }
+                        return;
+                    }
+
+                    // 以後は通常の復唱モードで対話継続
+                    statusEl.textContent = '文字起こし成功 → 応答生成中...';
+                    const resp = await postJson('/text', { text: data.text, voice_id: voiceSel.value, mode: 'confirm' });
+                    if (resp && resp.ok && resp.audio) {
+                        addMsg(resp.text, 'ai');
+                        const mimeType = resp.format === 'mp3' ? 'audio/mpeg' : resp.format === 'wav' ? 'audio/wav' : 'audio/mpeg';
+                        const aBlob = b64ToBlob(resp.audio, mimeType);
+                        if (player.src) { try { URL.revokeObjectURL(player.src); } catch (e) {} }
+                        player.src = URL.createObjectURL(aBlob);
+                        player.load();
+                        await player.play().catch(()=>{});
+                        statusEl.textContent = '発話中...';
+                    } else {
+                        statusEl.textContent = '応答生成エラー';
+                    }
+                } else {
+                    statusEl.textContent = 'STTエラー: ' + (data && data.error ? data.error : '不明');
+                }
+            } catch (e) {
+                statusEl.textContent = '録音失敗: ' + e.message;
+            } finally {
+                isRecording = false;
+            }
+        }
+
+        // TTS再生終了後に自動でSTT待機に遷移
+        player.addEventListener('ended', () => {
+            if (!autoConversation) return;
+            statusEl.textContent = '発話終了 → 録音待機...';
+            setTimeout(() => { recordAndTranscribe(); }, 400);
+        });
+
+        function startConversation() {
+            autoConversation = true;
+            hasStartedConversation = false;
+            statusEl.textContent = '会話を開始します。開始合図（「もしもし」など）をお話しください。';
+            recordAndTranscribe();
+        }
+
+        function stopConversation() {
+            autoConversation = false;
+            hasStartedConversation = false;
+            try {
+                if (currentMediaRecorder && currentMediaRecorder.state === 'recording') {
+                    currentMediaRecorder.stop();
+                }
+            } catch(_){ }
+            try {
+                if (currentStream) {
+                    currentStream.getTracks().forEach(t => t.stop());
+                    currentStream = null;
+                }
+            } catch(_){ }
+            isRecording = false;
+            try { if (!player.paused) player.pause(); } catch(_){ }
+            statusEl.textContent = '会話を停止しました。再開するには「会話開始」を押してください。';
+        }
+
+        startBtn.addEventListener('click', startConversation);
+        stopBtn.addEventListener('click', stopConversation);
+    </script>
+</body>
+</html>
+
+

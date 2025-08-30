@@ -1,0 +1,11 @@
+flask==2.3.3
+flask-socketio==5.3.6
+python-socketio==5.8.0
+requests==2.31.0
+python-dotenv==1.0.0
+pydub==0.25.1
+numpy>=1.26.0
+soundfile>=0.12.1
+fish-audio-sdk>=2025.6.3
+openai>=1.0.0
+twilio>=9.0.0

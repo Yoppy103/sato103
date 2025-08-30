@@ -1,0 +1,1916 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fish Audio リアルタイム会話アプリ</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 1.1em;
+        }
+        
+        .recording-tips {
+            background: #e3f2fd;
+            border: 1px solid #2196f3;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 15px;
+            text-align: left;
+        }
+        
+        .recording-tips p {
+            margin: 0 0 10px 0;
+            color: #1976d2;
+            font-weight: 600;
+        }
+        
+        .recording-tips ul {
+            margin: 0;
+            padding-left: 20px;
+            color: #1565c0;
+        }
+        
+        .recording-tips li {
+            margin: 5px 0;
+            font-size: 0.95em;
+        }
+
+        .status {
+            background: #e8f5e8;
+            border: 1px solid #4caf50;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            text-align: center;
+            color: #2e7d32;
+            font-weight: 500;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 50px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 120px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: #f8f9fa;
+            color: #333;
+            border: 2px solid #e9ecef;
+        }
+
+        .btn-secondary:hover {
+            background: #e9ecef;
+            transform: translateY(-2px);
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .recording-indicator {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .recording-indicator.recording {
+            display: block;
+        }
+
+        .pulse {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #dc3545;
+            display: inline-block;
+            margin-right: 10px;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+
+
+        .text-input {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .text-input input {
+            flex: 1;
+            padding: 15px;
+            border: 2px solid #e9ecef;
+            border-radius: 25px;
+            font-size: 1em;
+            outline: none;
+            transition: border-color 0.3s ease;
+        }
+
+        .text-input input:focus {
+            border-color: #667eea;
+        }
+
+        .text-input button {
+            padding: 15px 25px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .text-input button:hover {
+            background: #218838;
+            transform: translateY(-2px);
+        }
+        
+        .auto-recording-info {
+            background: #e8f4fd;
+            border: 1px solid #bee5eb;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+            color: #0c5460;
+        }
+        
+        .auto-recording-info h4 {
+            color: #0c5460;
+            margin-bottom: 10px;
+        }
+        
+        .auto-recording-info ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        
+        .auto-recording-info li {
+            margin: 5px 0;
+        }
+        
+        .auto-recording-info em {
+            color: #6c757d;
+            font-style: italic;
+        }
+        
+        /* リアルタイム音声表示のスタイル */
+        .realtime-audio-display {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+            color: white;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .realtime-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .realtime-header h4 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .audio-level-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .level-label {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        
+        .level-bar {
+            width: 100px;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        .level-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4ade80, #22c55e, #16a34a);
+            width: 0%;
+            transition: width 0.1s ease;
+            border-radius: 4px;
+            border-radius: 4px;
+        }
+        
+        .level-value {
+            font-size: 14px;
+            font-weight: 600;
+            min-width: 30px;
+            text-align: right;
+        }
+        
+        .realtime-content {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .current-text {
+            min-height: 60px;
+            display: flex;
+            align-items: center;
+            font-size: 16px;
+            line-height: 1.5;
+            margin-bottom: 10px;
+        }
+        
+        .current-text .placeholder {
+            opacity: 0.7;
+            font-style: italic;
+        }
+        
+        .current-text .live-text {
+            color: #fbbf24;
+            font-weight: 500;
+        }
+        
+        .confidence {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+            opacity: 0.8;
+        }
+        
+        .confidence-value {
+            font-weight: 600;
+            color: #fbbf24;
+        }
+        
+        /* 録音中のアニメーション */
+        .realtime-audio-display.recording .current-text .live-text {
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        /* チャット表示のスタイル */
+        .chat-container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            margin: 10px 0; /* 上下の間隔をさらに縮小 */
+            overflow: hidden;
+        }
+        
+        .chat-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .chat-header h4 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .btn-sm {
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+        
+        .btn-outline-secondary {
+            background: transparent;
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            color: white;
+        }
+        
+        .btn-outline-secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.8);
+        }
+        
+        .conversation {
+            background: #f8f9fa;
+            padding: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            min-height: 200px;
+            margin-bottom: 10px; /* 入力コンテナとの間隔を縮小 */
+        }
+        
+        .message {
+            display: flex;
+            margin-bottom: 20px;
+            max-width: 85%;
+        }
+        
+        .message.user {
+            margin-left: auto;
+            flex-direction: row-reverse;
+        }
+        
+        .message.assistant {
+            margin-right: auto;
+        }
+        
+        .message-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            margin: 0 10px;
+            flex-shrink: 0;
+        }
+        
+        .message.user .message-avatar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .message.assistant .message-avatar {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+        
+        .message-content {
+            background: white;
+            padding: 15px 20px;
+            border-radius: 18px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            position: relative;
+        }
+        
+        .sales-script-controls {
+            margin: 15px 0;
+            padding: 15px;
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 10px;
+        }
+        
+        .sales-script-controls h5 {
+            margin-bottom: 15px;
+            color: #856404;
+            text-align: center;
+        }
+        
+        .script-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .script-btn {
+            padding: 10px 15px;
+            border: 1px solid #ffc107;
+            background: #fff3cd;
+            color: #856404;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9em;
+        }
+        
+        .script-btn:hover {
+            background: #ffc107;
+            color: #fff;
+            transform: translateY(-2px);
+        }
+        
+        .full-script-btn {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #ffc107, #ff8f00);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .full-script-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 193, 7, 0.3);
+        }
+        
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            text-align: center;
+            font-weight: 500;
+            animation: slideIn 0.3s ease;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .script-content {
+            background: #e8f5e8;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .script-content .script-label {
+            font-weight: bold;
+            color: #155724;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+        }
+        
+        .script-content .script-text {
+            color: #155724;
+            line-height: 1.5;
+        }
+        
+        .conversation-status {
+            margin: 15px 0;
+            padding: 15px;
+            background: #e3f2fd;
+            border: 1px solid #2196f3;
+            border-radius: 10px;
+        }
+        
+        .conversation-status h5 {
+            margin-bottom: 15px;
+            color: #1976d2;
+            text-align: center;
+        }
+        
+        .status-info {
+            display: grid;
+            gap: 10px;
+        }
+        
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            background: white;
+            border-radius: 6px;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .status-item .label {
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .status-item .value {
+            color: #1976d2;
+            font-weight: 500;
+        }
+        
+        .message.user .message-content {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .message.assistant .message-content {
+            background: white;
+            color: #333;
+        }
+        
+        /* チャットメッセージエリアのスタイル */
+        .chat-messages {
+            background: #f8f9fa;
+            padding: 20px;
+            max-height: none; /* 高さ制限を削除して入力コンテナを含める */
+            overflow-y: visible; /* スクロールを無効化 */
+            min-height: 200px;
+            margin-bottom: 0px;
+            border-radius: 10px;
+        }
+        
+        /* 入力コンテナのスタイル */
+        .input-container {
+            margin-top: 0px;
+            padding-top: 15px; /* 上部のパディングを増加 */
+            border-top: 1px solid #e9ecef; /* 上部に境界線を追加 */
+        }
+        
+
+        
+        .message-text {
+            margin-bottom: 8px;
+            word-wrap: break-word;
+            line-height: 1.5;
+            font-size: 15px;
+        }
+        
+        .message-time {
+            font-size: 12px;
+            opacity: 0.7;
+            text-align: right;
+        }
+        
+        .message.user .message-time {
+            color: rgba(255, 255, 255, 0.8);
+        }
+        
+        .message.assistant .message-time {
+            color: #666;
+        }
+        
+        .user-text {
+            font-size: 13px;
+            color: #666;
+            font-style: italic;
+            margin: 8px 0;
+            padding: 8px 12px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 3px solid #667eea;
+        }
+        
+        /* スクロールバーのスタイル */
+        .conversation::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .conversation::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        
+        .conversation::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+        
+        .conversation::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            color: #721c24;
+            text-align: center;
+        }
+
+        .loading {
+            text-align: center;
+            color: #666;
+            font-style: italic;
+        }
+
+        .voice-selection {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            justify-content: center;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 15px;
+        }
+
+        .voice-selection label {
+            font-weight: 600;
+            color: #333;
+            margin: 0;
+        }
+
+        .voice-select {
+            padding: 10px 15px;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            font-size: 1em;
+            background: white;
+            cursor: pointer;
+            outline: none;
+            transition: border-color 0.3s ease;
+        }
+
+        .voice-select:focus {
+            border-color: #667eea;
+        }
+        
+        .mode-selector {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            justify-content: center;
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 15px;
+            border: 2px solid #2196f3;
+        }
+        
+        .mode-selector label {
+            font-weight: 600;
+            color: #1976d2;
+            margin: 0;
+        }
+        
+        .mode-selector select {
+            padding: 10px 15px;
+            border: 2px solid #2196f3;
+            border-radius: 10px;
+            font-size: 1em;
+            background: white;
+            cursor: pointer;
+            outline: none;
+            transition: border-color 0.3s ease;
+        }
+        
+        .mode-selector select:focus {
+            border-color: #0d47a1;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+                margin: 10px;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .btn {
+                width: 100%;
+                max-width: 200px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🐟 Fish Audio</h1>
+            <p>リアルタイム音声会話アプリ</p>
+                    <div class="recording-tips">
+            <p><strong>音声録音のコツ:</strong></p>
+            <ul>
+                <li>静かな環境で録音してください</li>
+                <li>マイクに近づいて、はっきりと話してください</li>
+                <li>録音時間は3-10秒程度が最適です</li>
+                <li>日本語で話してください</li>
+            </ul>
+        </div>
+        
+        <!-- 会話管理エンジンの状態表示 -->
+        <div class="conversation-status" id="conversationStatus">
+            <h5>会話管理エンジン</h5>
+            <div class="status-info">
+                <div class="status-item">
+                    <span class="label">状態:</span>
+                    <span class="value" id="conversationState">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="label">スロット充足率:</span>
+                    <span class="value" id="slotCompletionRate">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="label">次の質問:</span>
+                    <span class="value" id="nextQuestion">-</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="status" id="status">
+            接続中...
+        </div>
+
+                <div class="controls">
+            <button class="btn btn-primary" id="startRecording">
+                会話する
+            </button>
+            <button class="btn btn-danger" id="stopRecording" disabled>
+                会話停止
+            </button>
+
+        </div>
+        
+        <!-- チャット表示エリア -->
+        <div class="chat-container">
+            <div class="chat-header">
+                <h4>会話履歴</h4>
+                <button class="btn btn-sm btn-outline-secondary" id="clearConversation">
+                    クリア
+                </button>
+            </div>
+            <div class="conversation" id="conversation">
+                <div class="message assistant">
+                    <div class="message-avatar">A</div>
+                    <div class="message-content">
+                        <div class="message-text">こんにちは！音声で会話を始めましょう。</div>
+                        <div class="message-time">今</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 営業スクリプトコントロール -->
+            <div class="sales-script-controls">
+                <h5>営業トークスクリプト</h5>
+                <div class="script-buttons">
+                    <button class="script-btn" data-step="greeting">挨拶</button>
+                    <button class="script-btn" data-step="introduction">自己紹介</button>
+                    <button class="script-btn" data-step="apology">謝罪</button>
+                    <button class="script-btn" data-step="business_intro">事業紹介</button>
+                    <button class="script-btn" data-step="product_intro">商品紹介</button>
+                    <button class="script-btn" data-step="features">特徴説明</button>
+                    <button class="script-btn" data-step="sample_offer">サンプル提供</button>
+                    <button class="script-btn" data-step="request_info">情報依頼</button>
+                </div>
+                <button class="full-script-btn" id="fullScriptBtn">完全なスクリプト再生</button>
+            </div>
+        </div>
+        
+        <!-- リアルタイム音声表示エリア -->
+        <div class="realtime-audio-display" id="realtimeAudioDisplay" style="display: none;">
+            <div class="realtime-header">
+                <h4>リアルタイム音声認識</h4>
+                <div class="audio-level-indicator">
+                    <span class="level-label">音声レベル:</span>
+                    <div class="level-bar">
+                        <div class="level-fill" id="audioLevelFill"></div>
+                    </div>
+                    <span class="level-value" id="audioLevelValue">0</span>
+                </div>
+            </div>
+            <div class="realtime-content">
+                <div class="current-text" id="currentText">
+                    <span class="placeholder">音声を話してください...</span>
+                </div>
+                <div class="confidence" id="confidence">
+                    <span class="confidence-label">認識精度:</span>
+                    <span class="confidence-value" id="confidenceValue">--</span>
+                </div>
+            </div>
+        </div>
+        
+
+
+        <div class="voice-selection">
+            <label for="voiceSelect">音声モデル:</label>
+            <select id="voiceSelect" class="voice-select">
+                <option value="japanese-female-1">日本語（女性1）</option>
+                <option value="japanese-male-1">日本語（男性1）</option>
+                <option value="japanese-female-2">日本語（女性2）</option>
+                <option value="english-female-1">英語（女性1）</option>
+                <option value="english-male-1">英語（男性1）</option>
+                <option value="chinese-female-1">中国語（女性1）</option>
+                <option value="korean-female-1">韓国語（女性1）</option>
+                <option value="fbea303b64374bffb8843569404b095e">まな（カスタムボイス）</option>
+                <option value="test-female">テスト用女性音声</option>
+                <option value="test-male">テスト用男性音声</option>
+                <option value="default">デフォルト音声</option>
+                <option value="auto">自動選択</option>
+            </select>
+        </div>
+
+        <div class="recording-indicator" id="recordingIndicator">
+            <span class="pulse"></span>
+            録音中...
+        </div>
+
+        <div class="chat-container">
+
+            
+
+            
+            <div class="chat-messages" id="chatMessages">
+                <div class="message system">
+                    <div class="message-content">
+                        <p>AIアシスタントと会話を開始してください。テキスト入力または音声録音でメッセージを送信できます。</p>
+                    </div>
+                </div>
+                
+                <!-- テキスト入力を会話履歴の直下に移動 -->
+                <div class="input-container">
+                    <div class="text-input-container">
+                        <input type="text" id="textInput" placeholder="メッセージを入力してください..." />
+                        <button id="sendTextBtn">送信</button>
+                    </div>
+                    
+                    <div class="voice-input-container">
+                        <button id="recordBtn" class="record-btn">録音開始</button>
+                        <button id="stopRecordBtn" class="stop-record-btn" style="display: none;">録音停止</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Socket.IO接続
+        const socket = io();
+        
+        // DOM要素
+        const statusEl = document.getElementById('status');
+        const startBtn = document.getElementById('startRecording');
+        const stopBtn = document.getElementById('stopRecording');
+        const clearBtn = document.getElementById('clearConversation');
+        const recordingIndicator = document.getElementById('recordingIndicator');
+        const conversationEl = document.getElementById('conversation');
+        const textInput = document.getElementById('textInput');
+        const sendTextBtn = document.getElementById('sendText');
+
+        // 音声録音関連
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+
+        // Socket.IOイベントハンドラー
+        socket.on('connect', () => {
+            statusEl.textContent = '接続されました';
+            statusEl.style.background = '#e8f5e8';
+            statusEl.style.borderColor = '#4caf50';
+            statusEl.style.color = '#2e7d32';
+        });
+
+        socket.on('disconnect', () => {
+            statusEl.textContent = '接続が切れました';
+            statusEl.style.background = '#fff3cd';
+            statusEl.style.borderColor = '#ffc107';
+            statusEl.style.color = '#856404';
+        });
+
+        socket.on('status', (data) => {
+            statusEl.textContent = data.message;
+        });
+
+        socket.on('error', (data) => {
+            console.error('❌ サーバーエラー:', data);
+            if (data.message) {
+                showError(data.message);
+            } else if (data.error) {
+                showError(`エラー: ${data.error}`);
+            } else {
+                showError('不明なエラーが発生しました');
+            }
+        });
+
+        // 音声モデル選択の変更を監視
+        document.getElementById('voiceSelect').addEventListener('change', (e) => {
+            const selectedVoice = e.target.value;
+            console.log('🎵 音声モデルが変更されました:', selectedVoice);
+            
+            // 選択されたモデルに応じてメッセージを表示
+            let modelName = '';
+            let modelDescription = '';
+            
+            switch(selectedVoice) {
+                case 'fbea303b64374bffb8843569404b095e':
+                    modelName = 'まな（カスタムボイス）';
+                    modelDescription = '元気で明るい女性の声 - Fish Audioのカスタムボイス';
+                    break;
+                case 'japanese-female-1':
+                    modelName = '日本語（女性1）';
+                    modelDescription = '標準的な日本語女性の声';
+                    break;
+                case 'japanese-male-1':
+                    modelName = '日本語（男性1）';
+                    modelDescription = '標準的な日本語男性の声';
+                    break;
+                case 'japanese-female-2':
+                    modelName = '日本語（女性2）';
+                    modelDescription = '別の日本語女性の声';
+                    break;
+                case 'english-female-1':
+                    modelName = '英語（女性1）';
+                    modelDescription = '標準的な英語女性の声';
+                    break;
+                case 'english-male-1':
+                    modelName = '英語（男性1）';
+                    modelDescription = '標準的な英語男性の声';
+                    break;
+                case 'chinese-female-1':
+                    modelName = '中国語（女性1）';
+                    modelDescription = '標準的な中国語女性の声';
+                    break;
+                case 'korean-female-1':
+                    modelName = '韓国語（女性1）';
+                    modelDescription = '標準的な韓国語女性の声';
+                    break;
+                case 'test-female':
+                    modelName = 'テスト用女性音声';
+                    modelDescription = 'テスト用の女性音声モデル';
+                    break;
+                case 'test-male':
+                    modelName = 'テスト用男性音声';
+                    modelDescription = 'テスト用の男性音声モデル';
+                    break;
+                case 'default':
+                    modelName = 'デフォルト音声';
+                    modelDescription = 'デフォルトの音声モデル';
+                    break;
+                case 'auto':
+                    modelName = '自動選択';
+                    modelDescription = 'サーバーによって自動的に選択される音声モデル';
+                    break;
+                default:
+                    modelName = '不明なモデル';
+                    modelDescription = '不明な音声モデル';
+            }
+            
+            console.log('📝 選択されたモデル名:', modelName);
+            console.log('📋 モデル説明:', modelDescription);
+            console.log('🔑 モデルID:', selectedVoice);
+            
+            // 選択されたモデルがまなの場合、特別なメッセージを表示
+            if (selectedVoice === 'fbea303b64374bffb8843569404b095e') {
+                console.log('🌟 まなのカスタムボイスが選択されました！');
+                console.log('🎯 期待される音声: 元気で明るい女性の声');
+                console.log('⚠️  注意: このモデルIDが正しく動作しない場合は、Fish Audio APIの設定を確認してください');
+            }
+        });
+
+        // 自動録音の設定
+        let autoRecording = false;
+        let audioContext;
+        let analyser;
+        let microphone;
+        let silenceTimer;
+        let isAutoRecording = false;
+        
+        // 自動会話の開始
+        function startAutoRecording() {
+            if (autoRecording || isAutoRecording) return;
+            
+            console.log('🎤 自動会話開始処理中...');
+            
+            try {
+                navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                    console.log('✅ マイクストリーム取得成功');
+                    
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    analyser = audioContext.createAnalyser();
+                    microphone = audioContext.createMediaStreamSource(stream);
+                    
+                    analyser.fftSize = 256;
+                    analyser.smoothingTimeConstant = 0.8;
+                    microphone.connect(analyser);
+                    
+                    isAutoRecording = true;
+                    autoRecording = true;
+                    startBtn.textContent = '🔄 会話中...';
+                    startBtn.disabled = true;
+                    stopBtn.textContent = '⏹️ 会話停止';
+                    stopBtn.disabled = false;
+                    recordingIndicator.classList.add('recording');
+                    
+                    console.log('🎤 自動会話開始完了');
+                    console.log('🔍 音声レベル監視開始');
+                    
+                    // リアルタイム表示を有効化
+                    toggleRealtimeDisplay(true);
+                    updateCurrentText('音声を話してください...', false);
+                    
+                    // Fish Audio API連携リアルタイム音声認識を初期化
+                    initFishAudioRealtimeSTT();
+                    
+                    monitorAudioLevel();
+                }).catch(error => {
+                    console.error('❌ マイクストリーム取得エラー:', error);
+                    showError('マイクストリームの取得に失敗しました: ' + error.message);
+                });
+            } catch (error) {
+                console.error('❌ 自動会話開始エラー:', error);
+                showError('自動会話の開始に失敗しました: ' + error.message);
+            }
+        }
+        
+        // 音声レベル監視
+        function monitorAudioLevel() {
+            if (!isAutoRecording) return;
+            
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            analyser.getByteFrequencyData(dataArray);
+            
+            // 音声レベルの平均を計算
+            let sum = 0;
+            for (let i = 0; i < bufferLength; i++) {
+                sum += dataArray[i];
+            }
+            const average = sum / bufferLength;
+            
+            // リアルタイム表示を更新
+            updateRealtimeDisplay(average);
+            
+            // デバッグ: 音声レベルを表示（開発時のみ）
+            if (Math.random() < 0.1) { // 10%の確率でログ出力
+                console.log(`🎵 音声レベル: ${average.toFixed(1)} (録音中: ${isRecording})`);
+            }
+            
+            // 音声レベルが一定以上なら録音開始
+            if (average > 15 && !isRecording) {
+                console.log(`🎤 音声検出！録音開始 (レベル: ${average.toFixed(1)})`);
+                startRecordingFromStream();
+            }
+            // 無音が続いたら録音停止
+            else if (average < 8 && isRecording) {
+                if (silenceTimer) clearTimeout(silenceTimer);
+                silenceTimer = setTimeout(() => {
+                    if (isRecording) {
+                        console.log(`🤐 無音検出！録音停止 (レベル: ${average.toFixed(1)})`);
+                        stopRecordingFromStream();
+                    }
+                }, 2000); // 2秒の無音で録音停止
+            }
+            
+            requestAnimationFrame(monitorAudioLevel);
+        }
+        
+        // ストリームから録音開始
+        function startRecordingFromStream() {
+            if (isRecording) return;
+            
+            try {
+                navigator.mediaDevices.getUserMedia({ audio: true }).then(audioStream => {
+                    console.log('🎤 録音ストリーム取得成功');
+                    
+                    mediaRecorder = new MediaRecorder(audioStream);
+                    audioChunks = [];
+                    
+                    mediaRecorder.ondataavailable = (event) => {
+                        if (event.data.size > 0) {
+                            audioChunks.push(event.data);
+                            console.log(`📦 音声データ受信: ${event.data.size} bytes`);
+                        }
+                    };
+
+                    mediaRecorder.onstop = () => {
+                        console.log('⏹️ MediaRecorder停止');
+                        
+                        if (audioChunks.length > 0) {
+                            // ブラウザがサポートする音声形式を使用
+                            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                                const base64Audio = reader.result.split(',')[1];
+                                const selectedVoice = document.getElementById('voiceSelect').value;
+                                console.log('🎵 自動録音時の音声モデル:', selectedVoice);
+                                console.log('🎤 音声データサイズ:', base64Audio.length, '文字');
+                                console.log('🎵 音声形式:', audioBlob.type);
+                                
+                                console.log('📡 音声データをサーバーに送信中...');
+                                socket.emit('audio_data', { 
+                                    audio: base64Audio,
+                                    voice_id: selectedVoice,
+                                    format: audioBlob.type
+                                });
+                                console.log('✅ 音声データ送信完了');
+                                
+                                // リアルタイム表示を待機モードに更新
+                                updateCurrentText('🔄 音声認識中...', false);
+                                
+                                // 音声データ送信完了後、次の録音を準備
+                                setTimeout(() => {
+                                    if (autoRecording && !isRecording) {
+                                        console.log('🔄 次の録音の準備完了、音声を待機中...');
+                                        updateCurrentText('🎤 音声を話してください（自動録音待機中）', false);
+                                    }
+                                }, 1000);
+                            };
+                            reader.readAsDataURL(audioBlob);
+                        } else {
+                            console.log('⚠️ 音声データが受信されませんでした');
+                        }
+                    };
+
+                    mediaRecorder.start(100); // 100msごとにデータを取得
+                    isRecording = true;
+                    console.log('🎤 録音開始（自動）');
+                    
+                    // リアルタイム表示を録音中モードに更新
+                    updateCurrentText('🎤 録音中... 話してください', true);
+                });
+            } catch (error) {
+                console.error('自動録音エラー:', error);
+            }
+        }
+        
+        // Fish Audio APIと連携したリアルタイム音声認識
+        let isRealtimeSTT = false;
+        let sttInterval = null;
+        
+        // リアルタイム表示を更新
+        function updateRealtimeDisplay(audioLevel) {
+            const display = document.getElementById('realtimeAudioDisplay');
+            const levelFill = document.getElementById('audioLevelFill');
+            const levelValue = document.getElementById('audioLevelValue');
+            
+            if (display && levelFill && levelValue) {
+                // 音声レベルバーを更新
+                const percentage = Math.min((audioLevel / 50) * 100, 100);
+                levelFill.style.width = percentage + '%';
+                levelValue.textContent = Math.round(audioLevel);
+                
+                // 録音中かどうかでスタイルを変更
+                if (isRecording) {
+                    display.classList.add('recording');
+                } else {
+                    display.classList.remove('recording');
+                }
+            }
+        }
+        
+        // リアルタイム表示を表示/非表示
+        function toggleRealtimeDisplay(show) {
+            const display = document.getElementById('realtimeAudioDisplay');
+            if (display) {
+                display.style.display = show ? 'block' : 'none';
+                console.log(`🖥️ リアルタイム表示: ${show ? '表示' : '非表示'}`);
+            } else {
+                console.error('❌ リアルタイム表示要素が見つかりません');
+            }
+        }
+        
+        // 現在のテキストを更新
+        function updateCurrentText(text, isLive = false) {
+            const currentText = document.getElementById('currentText');
+            if (currentText) {
+                if (isLive) {
+                    currentText.innerHTML = `<span class="live-text">${text}</span>`;
+                } else {
+                    currentText.innerHTML = text;
+                }
+                console.log(`📝 テキスト更新: ${text} (ライブ: ${isLive})`);
+            } else {
+                console.error('❌ 現在のテキスト要素が見つかりません');
+            }
+        }
+        
+        // Fish Audio APIと連携したリアルタイム音声認識の初期化
+        function initFishAudioRealtimeSTT() {
+            if (isRealtimeSTT) return;
+            
+            console.log('🎤 Fish Audio API連携リアルタイム音声認識開始');
+            isRealtimeSTT = true;
+            
+            // リアルタイム表示を更新
+            updateCurrentText('🎤 Fish Audio API連携中... 話してください', true);
+            
+            // 音声レベルが一定以上になったらリアルタイムSTTを開始
+            startRealtimeSTT();
+        }
+        
+        // リアルタイムSTTの開始
+        function startRealtimeSTT() {
+            if (!isRealtimeSTT || isRecording) return;
+            
+            console.log('🎤 リアルタイムSTT開始');
+            
+            // 短い間隔で音声データを送信してSTT処理
+            sttInterval = setInterval(() => {
+                if (isRealtimeSTT && !isRecording && autoRecording) {
+                    // 現在の音声レベルを確認
+                    if (analyser && audioContext) {
+                        const bufferLength = analyser.frequencyBinCount;
+                        const dataArray = new Uint8Array(bufferLength);
+                        analyser.getByteFrequencyData(dataArray);
+                        
+                        // 音声レベルの平均を計算
+                        let sum = 0;
+                        for (let i = 0; i < bufferLength; i++) {
+                            sum += dataArray[i];
+                        }
+                        const average = sum / bufferLength;
+                        
+                        // 音声レベルが一定以上ならリアルタイムSTT処理
+                        if (average > 20) {
+                            console.log(`🎤 リアルタイムSTT処理中 (レベル: ${average.toFixed(1)})`);
+                            updateCurrentText(`🎯 リアルタイム認識中... (レベル: ${average.toFixed(1)})`, true);
+                            
+                            // 短時間の音声データを取得してSTT処理
+                            captureShortAudioForSTT();
+                        }
+                    }
+                }
+            }, 500); // 500msごとにチェック
+        }
+        
+        // 短時間の音声データを取得してSTT処理
+        function captureShortAudioForSTT() {
+            if (!audioContext || !microphone) return;
+            
+            try {
+                // 短時間の音声データを録音
+                const mediaRecorder = new MediaRecorder(microphone.stream);
+                const audioChunks = [];
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                    }
+                };
+                
+                mediaRecorder.onstop = () => {
+                    if (audioChunks.length > 0) {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            const base64Audio = reader.result.split(',')[1];
+                            
+                            // Fish Audio APIに短時間音声データを送信
+                            console.log('📡 リアルタイムSTT用音声データ送信中...');
+                            socket.emit('realtime_stt', { 
+                                audio: base64Audio,
+                                voice_id: document.getElementById('voiceSelect').value
+                            });
+                        };
+                        reader.readAsDataURL(audioBlob);
+                    }
+                };
+                
+                // 1秒間録音
+                mediaRecorder.start();
+                setTimeout(() => {
+                    mediaRecorder.stop();
+                }, 1000);
+                
+            } catch (error) {
+                console.error('❌ リアルタイムSTT録音エラー:', error);
+            }
+        }
+        
+        // リアルタイムSTTの停止
+        function stopRealtimeSTT() {
+            if (sttInterval) {
+                clearInterval(sttInterval);
+                sttInterval = null;
+            }
+            isRealtimeSTT = false;
+            console.log('🛑 リアルタイムSTT停止');
+        }
+        
+        // 認識精度を更新
+        function updateConfidence(confidence) {
+            const confidenceValue = document.getElementById('confidenceValue');
+            if (confidenceValue) {
+                confidenceValue.textContent = confidence + '%';
+                console.log(`📊 認識精度更新: ${confidence}%`);
+            } else {
+                console.error('❌ 認識精度要素が見つかりません');
+            }
+        }
+        
+        // ストリームから録音停止
+        function stopRecordingFromStream() {
+            if (!isRecording) return;
+            
+            console.log('⏹️ 録音停止処理開始');
+            
+            if (mediaRecorder && isRecording) {
+                try {
+                    // 録音を停止
+                    mediaRecorder.stop();
+                    isRecording = false;
+                    console.log('⏹️ 録音停止（自動）');
+                    
+                    // ストリームを停止
+                    if (mediaRecorder.stream) {
+                        mediaRecorder.stream.getTracks().forEach(track => {
+                            track.stop();
+                            console.log(`🛑 音声トラック停止: ${track.label}`);
+                        });
+                    }
+                    
+                    console.log('🔄 録音停止完了、次の録音を待機中...');
+                    
+                    // リアルタイム表示を待機モードに更新
+                    updateCurrentText('🔄 音声認識中...', false);
+                } catch (error) {
+                    console.error('❌ 録音停止エラー:', error);
+                }
+            } else {
+                console.log('⚠️ 録音中ではありません');
+            }
+        }
+        
+        // 自動会話の停止
+        function stopAutoRecording() {
+            isAutoRecording = false;
+            autoRecording = false;
+            
+            if (silenceTimer) clearTimeout(silenceTimer);
+            if (isRecording) stopRecordingFromStream();
+            
+            // Fish Audio API連携リアルタイム音声認識を停止
+            stopRealtimeSTT();
+            
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+            if (microphone) {
+                microphone.disconnect();
+                microphone = null;
+            }
+            
+            startBtn.textContent = '🎤 会話する';
+            startBtn.disabled = false;
+            stopBtn.textContent = '⏹️ 会話停止';
+            stopBtn.disabled = true;
+            recordingIndicator.classList.remove('recording');
+            
+            // リアルタイム表示を無効化
+            toggleRealtimeDisplay(false);
+            
+            console.log('🛑 自動会話停止');
+        }
+        
+        // 会話開始ボタン（自動会話モード）
+        startBtn.addEventListener('click', () => {
+            if (!autoRecording) {
+                startAutoRecording();
+            }
+        });
+        
+        // 会話停止ボタン（自動会話停止）
+        stopBtn.addEventListener('click', () => {
+            if (autoRecording) {
+                stopAutoRecording();
+            } else if (isRecording) {
+                stopRecordingFromStream();
+            }
+        });
+        
+        // デバッグ用: 自動会話の状態をコンソールに表示
+        console.log('🎤 自動会話機能が初期化されました');
+        console.log('📋 使用方法:');
+        console.log('1. 🎤 会話するボタンをクリック');
+
+        
+        // リアルタイム表示の初期化確認
+        console.log('🖥️ リアルタイム表示要素の確認:');
+        console.log('- リアルタイム表示:', document.getElementById('realtimeAudioDisplay') ? '✅ 見つかりました' : '❌ 見つかりません');
+        console.log('- 音声レベルバー:', document.getElementById('audioLevelFill') ? '✅ 見つかりました' : '❌ 見つかりません');
+        console.log('- 音声レベル値:', document.getElementById('audioLevelValue') ? '✅ 見つかりました' : '❌ 見つかりません');
+        console.log('- 現在のテキスト:', document.getElementById('currentText') ? '✅ 見つかりました' : '❌ 見つかりません');
+        console.log('- 認識精度:', document.getElementById('confidenceValue') ? '✅ 見つかりました' : '❌ 見つかりません');
+
+        // 会話停止
+        stopBtn.addEventListener('click', () => {
+            if (mediaRecorder && isRecording) {
+                mediaRecorder.stop();
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                isRecording = false;
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                recordingIndicator.classList.remove('recording');
+            }
+        });
+
+        // メッセージを追加する関数
+        function addMessage(text, sender, userText = null) {
+            const conversationEl = document.getElementById('conversation');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+            
+            const currentTime = new Date().toLocaleTimeString('ja-JP', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+            
+            let messageContent = '';
+            if (sender === 'user') {
+                messageContent = `
+                    <div class="message-avatar">U</div>
+                    <div class="message-content">
+                        <div class="message-text">${text}</div>
+                        <div class="message-time">${currentTime}</div>
+                    </div>
+                `;
+            } else if (sender === 'assistant') {
+                messageContent = `
+                    <div class="message-avatar">A</div>
+                    <div class="message-content">
+                        <div class="message-text">${text}</div>
+                        ${userText ? `<div class="user-text"><em>あなた: "${userText}"</em></div>` : ''}
+                        <div class="message-time">${currentTime}</div>
+                    </div>
+                `;
+            }
+            
+            messageDiv.innerHTML = messageContent;
+            conversationEl.appendChild(messageDiv);
+            
+            // スクロールを最下部に
+            conversationEl.scrollTop = conversationEl.scrollHeight;
+            
+            console.log(`💬 メッセージ追加: ${sender} - ${text}`);
+        }
+
+        // テキスト送信ボタンのイベントリスナー
+        document.getElementById('sendTextBtn').addEventListener('click', () => {
+            const text = textInput.value.trim();
+            if (text) {
+                const selectedVoice = document.getElementById('voiceSelect').value;
+                console.log('🎵 選択された音声モデル:', selectedVoice);
+                console.log('📝 送信するテキスト:', text);
+                
+                // ユーザーメッセージを表示
+                addMessage(text, 'user');
+                
+                socket.emit('text_message', { 
+                    text: text,
+                    voice_id: selectedVoice,
+                    mode: 'normal'
+                });
+                textInput.value = '';
+            }
+        });
+
+        // Enterキーでテキスト送信
+        textInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                document.getElementById('sendTextBtn').click();
+            }
+        });
+
+        // 会話クリア
+        clearBtn.addEventListener('click', () => {
+            conversationEl.innerHTML = `
+                <div class="message assistant">
+                    <div class="message-avatar">🤖</div>
+                    <div class="message-content">
+                        <div class="message-text">会話をクリアしました。</div>
+                        <div class="message-time">今</div>
+                    </div>
+                </div>
+            `;
+            console.log('🗑️ 会話履歴をクリアしました');
+        });
+
+        // 音声認識結果を受信
+        socket.on('text_recognized', (data) => {
+            addMessage(data.text, 'user');
+            
+            // リアルタイム表示に認識結果を表示
+            updateCurrentText(`🎯 認識結果: ${data.text}`, false);
+            
+            // 認識精度を更新（仮の値）
+            updateConfidence(95);
+        });
+        
+        // リアルタイムSTT結果を受信
+        socket.on('realtime_stt_result', (data) => {
+            console.log('🎯 リアルタイムSTT結果受信:', data);
+            
+            if (data.text && data.text.trim()) {
+                // リアルタイム表示に認識結果を表示
+                updateCurrentText(`🎯 リアルタイム認識: ${data.text}`, true);
+                
+                // 認識精度を更新
+                updateConfidence(data.confidence || 85);
+                
+                // 短時間後に次の認識を待機
+                setTimeout(() => {
+                    if (autoRecording && !isRecording) {
+                        updateCurrentText('🎤 次の音声を待機中...', false);
+                    }
+                }, 2000);
+            }
+        });
+
+        // AIの応答を受信
+        socket.on('audio_response', (data) => {
+            console.log('🎵 音声応答受信:', data);
+            
+            // 営業スクリプトの場合は、内容を直接表示
+            if (data.user_text && data.user_text.includes('営業スクリプト:')) {
+                // 営業スクリプトの内容を直接表示
+                const scriptContent = data.text;
+                addMessage(scriptContent, 'assistant', data.user_text);
+            } else {
+                // 通常のAI応答メッセージを表示
+                addMessage(data.text, 'assistant', data.user_text);
+            }
+            
+            // リアルタイム表示を更新（AI応答中）
+            updateCurrentText('🤖 AIが応答中...', false);
+            
+            // 音声を再生
+            const audioData = atob(data.audio);
+            const audioArray = new Uint8Array(audioData.length);
+            for (let i = 0; i < audioData.length; i++) {
+                audioArray[i] = audioData.charCodeAt(i);
+            }
+            
+            const audioBlob = new Blob([audioArray], { type: 'audio/mp3' });
+            const audioUrl = URL.createObjectURL(audioBlob);
+            const audio = new Audio(audioUrl);
+            
+            // 音声再生完了後の処理
+            audio.onended = () => {
+                console.log('🎵 音声再生完了');
+                
+                // 音声応答完了後、自動的に次の録音を待機
+                if (autoRecording) {
+                    console.log('🔄 音声応答完了、次の録音を自動待機中...');
+                    
+                    // リアルタイム表示を更新（次の録音待機）
+                    updateCurrentText('🎤 音声を話してください（自動録音待機中）', false);
+                    
+                    // 3秒後に次の録音準備完了
+                    setTimeout(() => {
+                        if (autoRecording && !isRecording) {
+                            console.log('✅ 次の録音の準備完了、音声を待機中...');
+                        }
+                    }, 3000);
+                }
+            };
+            
+            // 音声再生エラーの処理
+            audio.onerror = (error) => {
+                console.error('❌ 音声再生エラー:', error);
+                
+                // エラーが発生しても次の録音を待機
+                if (autoRecording) {
+                    console.log('🔄 音声再生エラー後、次の録音を自動待機中...');
+                    
+                    // リアルタイム表示を更新（エラー後）
+                    updateCurrentText('🎤 音声を話してください（自動録音待機中）', false);
+                    
+                    setTimeout(() => {
+                        if (autoRecording && !isRecording) {
+                            console.log('✅ 次の録音の準備完了、音声を待機中...');
+                        }
+                    }, 2000);
+                }
+            };
+            
+            audio.play();
+        });
+        
+        // 音声認識エラーの処理
+        socket.on('stt_error', (data) => {
+            console.error('❌ 音声認識エラー:', data);
+            let errorMessage = '音声認識に失敗しました';
+            
+            if (data.error && data.error.includes('WAV形式')) {
+                errorMessage = '音声形式が正しくありません。ブラウザを再読み込みしてから再度お試しください。';
+            } else if (data.error && data.error.includes('Permission denied')) {
+                errorMessage = 'マイクの使用許可が必要です。ブラウザの設定でマイクを許可してください。';
+            } else if (data.error) {
+                errorMessage = `音声認識エラー: ${data.error}`;
+            }
+            
+            showError(errorMessage);
+            
+            // 録音状態をリセット
+            if (isAutoRecording) {
+                stopAutoRecording();
+            }
+        });
+
+        // エラー表示
+        function showError(message) {
+            try {
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'error';
+                errorDiv.textContent = message;
+                
+                // 会話履歴の最初にエラーメッセージを挿入
+                if (conversationEl && conversationEl.firstChild) {
+                    conversationEl.insertBefore(errorDiv, conversationEl.firstChild);
+                } else if (conversationEl) {
+                    conversationEl.appendChild(errorDiv);
+                } else {
+                    // フォールバック: bodyの最後に追加
+                    document.body.appendChild(errorDiv);
+                }
+                
+                // 5秒後に自動削除
+                setTimeout(() => {
+                    if (errorDiv.parentNode) {
+                        errorDiv.remove();
+                    }
+                }, 5000);
+                
+                console.log('❌ エラー表示:', message);
+            } catch (e) {
+                console.error('❌ エラー表示でエラーが発生:', e);
+                // フォールバック: コンソールにのみ表示
+                console.error('❌ エラーメッセージ:', message);
+            }
+        }
+        
+
+        
+        // 営業スクリプトボタンのイベントリスナー
+        document.querySelectorAll('.script-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const step = btn.dataset.step;
+                console.log(`📋 営業スクリプト実行: ${step}`);
+                executeSalesScript(step);
+            });
+        });
+        
+        // 全編再生ボタンのイベントリスナー
+        document.getElementById('fullScriptBtn').addEventListener('click', () => {
+            console.log('🎬 営業スクリプト全編再生開始');
+            playFullSalesScript();
+        });
+        
+        // 営業スクリプトの実行
+        function executeSalesScript(step, isFullScript = false) {
+            const selectedVoice = document.getElementById('voiceSelect').value;
+            
+            // 営業スクリプトのステップ名を表示
+            const stepNames = {
+                'greeting': '挨拶',
+                'introduction': '自己紹介',
+                'apology': '謝罪',
+                'business_intro': '事業紹介',
+                'product_intro': '商品紹介',
+                'features': '特徴説明',
+                'sample_offer': 'サンプル提供',
+                'request_info': '情報依頼'
+            };
+            
+            const stepName = stepNames[step] || step;
+            
+            // 完全なスクリプト再生の場合も、ユーザーメッセージを表示する
+            addMessage(`営業スクリプト: ${stepName}`, 'user');
+            
+            // 営業スクリプトの内容は音声応答受信時に表示されるため、ここでは表示しない
+            
+            // サーバーに営業スクリプトの実行を要求
+            socket.emit('text_message', {
+                text: `営業スクリプト:${step}`,
+                voice_id: selectedVoice,
+                mode: 'sales'
+            });
+            
+            // ボタンを一時的に無効化（完全なスクリプト再生の場合は無効化しない）
+            if (!isFullScript) {
+                const btn = document.querySelector(`[data-step="${step}"]`);
+                btn.disabled = true;
+                btn.textContent = '⏳ 実行中...';
+                
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.textContent = stepName;
+                }, 3000);
+            }
+        }
+        
+        // 営業スクリプト全編再生
+        function playFullSalesScript() {
+            const fullScriptBtn = document.getElementById('fullScriptBtn');
+            fullScriptBtn.disabled = true;
+            fullScriptBtn.textContent = '⏳ 全編再生中...';
+            
+            // 全編再生開始のメッセージを表示
+            addMessage('営業スクリプト全編再生を開始します', 'user');
+            
+            const salesSteps = ['greeting', 'introduction', 'apology', 'business_intro', 'product_intro', 'features', 'sample_offer'];
+            let currentSalesStep = 0;
+            
+            function playNextStep() {
+                if (currentSalesStep < salesSteps.length) {
+                    const step = salesSteps[currentSalesStep];
+                    console.log(`🎬 全編再生: ステップ ${currentSalesStep + 1}/${salesSteps.length} - ${step}`);
+                    
+                    executeSalesScript(step, true); // 完全なスクリプト再生フラグを設定
+                    currentSalesStep++;
+                    
+                    // 音声再生完了を待ってから次のステップを実行
+                    waitForAudioCompletion(playNextStep);
+                } else {
+                    // 全編再生完了
+                    fullScriptBtn.disabled = false;
+                    fullScriptBtn.textContent = '完全なスクリプト再生';
+                    console.log('✅ 営業スクリプト全編再生完了');
+                    
+                    // 全編再生完了のメッセージを表示
+                    addMessage('営業スクリプト全編再生が完了しました', 'assistant');
+                }
+            }
+            
+            // 最初のステップを開始
+            playNextStep();
+        }
+        
+        // 音声再生完了を待つ関数
+        function waitForAudioCompletion(callback) {
+            // 音声応答を受信したら次のステップに進む
+            const originalHandler = socket.onevent;
+            let audioCompleted = false;
+            
+            socket.onevent = function(packet) {
+                if (packet.data && packet.data[0] === 'audio_response' && !audioCompleted) {
+                    audioCompleted = true;
+                    console.log('🎵 音声応答受信、音声再生完了を待機中...');
+                    
+                    // 音声データを再生
+                    const audioData = atob(packet.data[1].audio);
+                    const audioArray = new Uint8Array(audioData.length);
+                    for (let i = 0; i < audioData.length; i++) {
+                        audioArray[i] = audioData.charCodeAt(i);
+                    }
+                    
+                    const audioBlob = new Blob([audioArray], { type: 'audio/mp3' });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    const audio = new Audio(audioUrl);
+                    
+                    // 音声再生完了時に次のステップに進む
+                    audio.addEventListener('ended', () => {
+                        console.log('🎵 音声再生完了、次のステップに進みます');
+                        // 元のハンドラーを復元
+                        socket.onevent = originalHandler;
+                        // 待機時間を短縮（0.5秒）
+                        setTimeout(callback, 500);
+                    });
+                    
+                    // 音声再生開始
+                    audio.play().catch(e => {
+                        console.log('⚠️ 音声再生エラー、タイムアウトで次のステップに進みます:', e);
+                                            // エラーの場合はタイムアウトで次のステップに進む
+                    setTimeout(() => {
+                        socket.onevent = originalHandler;
+                        callback();
+                    }, 1500);
+                    });
+                    
+                    return;
+                }
+                // 元のハンドラーを呼び出し
+                originalHandler.call(this, packet);
+            };
+            
+            // タイムアウト処理（8秒後に次のステップに進む）
+            setTimeout(() => {
+                if (!audioCompleted) {
+                    console.log('⏰ タイムアウト、次のステップに進みます');
+                    socket.onevent = originalHandler;
+                    callback();
+                }
+            }, 8000);
+        }
+        
+        // 会話管理エンジンの状態表示を更新する関数
+        function updateConversationStatus() {
+            // 会話管理エンジンの状態を取得して表示を更新
+            const conversationStateEl = document.getElementById('conversationState');
+            const slotCompletionRateEl = document.getElementById('slotCompletionRate');
+            const nextQuestionEl = document.getElementById('nextQuestion');
+            
+            if (conversationStateEl && slotCompletionRateEl && nextQuestionEl) {
+                // 現在の会話履歴から状態を推測
+                const messages = document.querySelectorAll('.message');
+                if (messages.length > 0) {
+                    const lastMessage = messages[messages.length - 1];
+                    const isUserMessage = lastMessage.classList.contains('user');
+                    
+                    if (isUserMessage) {
+                        // ユーザーメッセージの場合は、次の質問を準備
+                        conversationStateEl.textContent = '応答待ち';
+                        slotCompletionRateEl.textContent = '計算中...';
+                        nextQuestionEl.textContent = 'AIが応答を生成中...';
+                    } else {
+                        // AIメッセージの場合は、次のステップを準備
+                        conversationStateEl.textContent = '応答完了';
+                        slotCompletionRateEl.textContent = '次の入力待ち';
+                        nextQuestionEl.textContent = '音声またはテキストで入力してください';
+                    }
+                } else {
+                    // 会話履歴がない場合
+                    conversationStateEl.textContent = '初期状態';
+                    slotCompletionRateEl.textContent = '0%';
+                    nextQuestionEl.textContent = '会話を開始してください';
+                }
+            }
+        }
+        
+        // ページ読み込み時に状態表示を初期化
+        document.addEventListener('DOMContentLoaded', () => {
+            updateConversationStatus();
+        });
+        
+        // メッセージ追加時に状態表示を更新
+        const originalAddMessage = window.addMessage;
+        window.addMessage = function(text, sender, userText) {
+            originalAddMessage.call(this, text, sender, userText);
+            updateConversationStatus();
+        };
+
+    </script>
+</body>
+</html>

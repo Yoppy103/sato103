@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>音声録音デバッグ</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+        }
+        .button:hover {
+            background: #0056b3;
+        }
+        .button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        .warning { background: #fff3cd; color: #856404; }
+        .audio-display {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        .debug-info {
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .audio-visualizer {
+            width: 100%;
+            height: 100px;
+            background: #000;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .recording-indicator {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #ccc;
+            margin-left: 10px;
+        }
+        .recording-indicator.recording {
+            background: #ff4444;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 音声録音デバッグ</h1>
+        
+        <div class="status info" id="status">
+            音声録音の詳細デバッグを開始します...
+        </div>
+        
+        <div>
+            <button class="button" id="startBtn">🎤 録音開始</button>
+            <button class="button" id="stopBtn" disabled>⏹️ 録音停止</button>
+            <button class="button" id="testBtn">🧪 音声テスト</button>
+            <span class="recording-indicator" id="recordingIndicator"></span>
+        </div>
+        
+        <div class="audio-display">
+            <h3>🎵 録音された音声:</h3>
+            <audio id="audioPlayer" controls></audio>
+            <div id="audioInfo">音声ファイルの情報がここに表示されます</div>
+        </div>
+        
+        <div class="audio-display">
+            <h3>📊 音声レベル表示:</h3>
+            <canvas id="audioVisualizer" class="audio-visualizer"></canvas>
+        </div>
+        
+        <div class="audio-display">
+            <h3>🔍 詳細デバッグ情報:</h3>
+            <div id="debug" class="debug-info"></div>
+        </div>
+        
+        <div class="audio-display">
+            <h3>📋 システム情報:</h3>
+            <div id="systemInfo" class="debug-info"></div>
+        </div>
+    </div>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+        let audioContext;
+        let analyser;
+        let microphone;
+        let animationId;
+        
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const testBtn = document.getElementById('testBtn');
+        const status = document.getElementById('status');
+        const audioPlayer = document.getElementById('audioPlayer');
+        const audioInfo = document.getElementById('audioInfo');
+        const debug = document.getElementById('debug');
+        const systemInfo = document.getElementById('systemInfo');
+        const recordingIndicator = document.getElementById('recordingIndicator');
+        const canvas = document.getElementById('audioVisualizer');
+        const ctx = canvas.getContext('2d');
+        
+        // デバッグ情報を表示
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logMessage = `[${timestamp}] ${message}`;
+            console.log(logMessage);
+            
+            const debugDiv = document.createElement('div');
+            debugDiv.textContent = logMessage;
+            debugDiv.style.color = type === 'error' ? '#721c24' : 
+                                  type === 'warning' ? '#856404' : 
+                                  type === 'success' ? '#155724' : '#0c5460';
+            debug.appendChild(debugDiv);
+            debug.scrollTop = debug.scrollHeight;
+        }
+        
+        // システム情報を表示
+        function showSystemInfo() {
+            const info = [
+                `🌐 ブラウザ: ${navigator.userAgent}`,
+                `📱 プラットフォーム: ${navigator.platform}`,
+                `🔊 音声サポート: ${navigator.mediaDevices ? '✅ あり' : '❌ なし'}`,
+                `🎤 getUserMedia サポート: ${navigator.mediaDevices && navigator.mediaDevices.getUserMedia ? '✅ あり' : '❌ なし'}`,
+                `📹 MediaRecorder サポート: ${window.MediaRecorder ? '✅ あり' : '❌ なし'}`,
+                `🎵 Web Audio API サポート: ${window.AudioContext || window.webkitAudioContext ? '✅ あり' : '❌ なし'}`,
+                `🔌 プロトコル: ${window.location.protocol}`,
+                `🏠 ホスト: ${window.location.host}`,
+                `📄 ページ: ${window.location.pathname}`
+            ];
+            
+            systemInfo.innerHTML = info.map(item => `<div>${item}</div>`).join('');
+        }
+        
+        // 音声レベル表示の初期化
+        function initAudioVisualizer() {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+            
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 256;
+            
+            log('🎵 音声レベル表示を初期化しました');
+        }
+        
+        // 音声レベル表示の更新
+        function updateVisualizer() {
+            if (!analyser) return;
+            
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            analyser.getByteFrequencyData(dataArray);
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#00ff00';
+            
+            const barWidth = canvas.width / bufferLength;
+            for (let i = 0; i < bufferLength; i++) {
+                const barHeight = (dataArray[i] / 255) * canvas.height;
+                ctx.fillRect(i * barWidth, canvas.height - barHeight, barWidth, barHeight);
+            }
+            
+            animationId = requestAnimationFrame(updateVisualizer);
+        }
+        
+        // マイクの権限確認
+        async function checkMicrophonePermission() {
+            try {
+                log('🎤 マイクの権限を確認中...');
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    } 
+                });
+                
+                log('✅ マイクの権限が許可されました');
+                status.className = 'status success';
+                status.textContent = '✅ マイクの権限が許可されました';
+                
+                // 音声レベル表示の初期化
+                initAudioVisualizer();
+                
+                stream.getTracks().forEach(track => track.stop());
+                return true;
+            } catch (error) {
+                log(`❌ マイクの権限エラー: ${error.message}`, 'error');
+                status.className = 'status error';
+                status.textContent = `❌ マイクの権限エラー: ${error.message}`;
+                return false;
+            }
+        }
+        
+        // 録音開始
+        async function startRecording() {
+            try {
+                log('🎤 録音開始...');
+                
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true,
+                        sampleRate: 44100,
+                        channelCount: 1
+                    } 
+                });
+                
+                log('📡 音声ストリームを取得しました');
+                
+                // 音声レベル表示に接続
+                if (analyser) {
+                    microphone = audioContext.createMediaStreamSource(stream);
+                    microphone.connect(analyser);
+                    log('🔌 音声レベル表示に接続しました');
+                }
+                
+                // MediaRecorderの設定
+                const options = {
+                    mimeType: 'audio/webm;codecs=opus',
+                    audioBitsPerSecond: 128000
+                };
+                
+                try {
+                    mediaRecorder = new MediaRecorder(stream, options);
+                    log('✅ MediaRecorderを作成しました');
+                } catch (e) {
+                    log(`⚠️ 高品質録音に失敗、フォールバック: ${e.message}`, 'warning');
+                    mediaRecorder = new MediaRecorder(stream);
+                    log('✅ 標準MediaRecorderを作成しました');
+                }
+                
+                audioChunks = [];
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                        log(`📦 音声データ受信: ${event.data.size} bytes, タイプ: ${event.data.type}`);
+                    }
+                };
+                
+                mediaRecorder.onstart = () => {
+                    log('🎬 MediaRecorderが開始されました');
+                };
+                
+                mediaRecorder.onstop = () => {
+                    log('⏹️ MediaRecorderが停止されました');
+                    
+                    if (audioChunks.length > 0) {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        const audioUrl = URL.createObjectURL(audioBlob);
+                        audioPlayer.src = audioUrl;
+                        
+                        // 音声ファイルの情報を表示
+                        const fileSize = audioBlob.size;
+                        const duration = audioPlayer.duration || '不明';
+                        audioInfo.innerHTML = `
+                            <strong>ファイルサイズ:</strong> ${fileSize} bytes (${(fileSize/1024).toFixed(1)} KB)<br>
+                            <strong>ファイルタイプ:</strong> ${audioBlob.type}<br>
+                            <strong>録音時間:</strong> ${duration}秒<br>
+                            <strong>チャンク数:</strong> ${audioChunks.length}
+                        `;
+                        
+                        log(`🎵 音声ファイル作成完了: ${fileSize} bytes, ${audioChunks.length} チャンク`);
+                        
+                        // Base64変換テスト
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            const base64Audio = reader.result.split(',')[1];
+                            log(`🔢 Base64変換完了: ${base64Audio.substring(0, 50)}...`);
+                            log(`📏 Base64文字数: ${base64Audio.length}`);
+                        };
+                        reader.readAsDataURL(audioBlob);
+                        
+                    } else {
+                        log('❌ 音声データが受信されませんでした', 'error');
+                        audioInfo.textContent = '❌ 音声データが受信されませんでした';
+                    }
+                    
+                    // 音声レベル表示を停止
+                    if (animationId) {
+                        cancelAnimationFrame(animationId);
+                    }
+                    
+                    // マイク接続を切断
+                    if (microphone) {
+                        microphone.disconnect();
+                        microphone = null;
+                    }
+                };
+                
+                mediaRecorder.onerror = (event) => {
+                    log(`❌ MediaRecorderエラー: ${event.error}`, 'error');
+                };
+                
+                // 録音開始
+                mediaRecorder.start(100); // 100msごとにデータを取得
+                isRecording = true;
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                recordingIndicator.classList.add('recording');
+                
+                // 音声レベル表示開始
+                updateVisualizer();
+                
+                status.className = 'status info';
+                status.textContent = '🎤 録音中...';
+                log('✅ 録音開始成功');
+                
+            } catch (error) {
+                log(`❌ 録音開始エラー: ${error.message}`, 'error');
+                status.className = 'status error';
+                status.textContent = `❌ 録音開始エラー: ${error.message}`;
+            }
+        }
+        
+        // 録音停止
+        function stopRecording() {
+            if (mediaRecorder && isRecording) {
+                log('⏹️ 録音停止中...');
+                mediaRecorder.stop();
+                isRecording = false;
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                recordingIndicator.classList.remove('recording');
+                
+                status.className = 'status info';
+                status.textContent = '⏹️ 録音停止中...';
+                
+                // ストリームを停止
+                mediaRecorder.stream.getTracks().forEach(track => {
+                    track.stop();
+                    log(`🛑 音声トラック停止: ${track.label}`);
+                });
+            }
+        }
+        
+        // 音声テスト
+        function testAudio() {
+            log('🧪 音声テスト開始...');
+            
+            // テスト用の音声を生成
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.setValueAtTime(440, audioContext.currentTime); // A音
+            gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.5);
+            
+            log('🎵 テスト音声（440Hz A音）を再生しました');
+        }
+        
+        // イベントリスナー
+        startBtn.addEventListener('click', startRecording);
+        stopBtn.addEventListener('click', stopRecording);
+        testBtn.addEventListener('click', testAudio);
+        
+        // 初期化
+        checkMicrophonePermission();
+        showSystemInfo();
+        
+        log('🚀 音声録音デバッグページが読み込まれました');
+        
+        // ページ離脱時のクリーンアップ
+        window.addEventListener('beforeunload', () => {
+            if (mediaRecorder && isRecording) {
+                mediaRecorder.stop();
+            }
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+            }
+        });
+    </script>
+</body>
+</html>
+
+
+

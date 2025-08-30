@@ -1,0 +1,48 @@
+[
+  {
+    "id": "greeting",
+    "description": "挨拶への即時応答",
+    "match": { "any_keywords": ["こんにちは", "もしもし", "お世話になっております", "初めまして"] },
+    "response": "お世話になっております。〇〇の△△です。本日は数十秒だけ、お米の仕入れについて要点だけご案内いたします。よろしいでしょうか？",
+    "action": "ask_consent"
+  },
+  {
+    "id": "deny",
+    "description": "お断りへの対応",
+    "match": { "any_keywords": ["いりません", "不要", "結構です", "断る", "間に合って"] },
+    "response": "承知しました。突然のご連絡失礼いたしました。今後のご連絡が不要でしたらお知らせください。失礼いたします。",
+    "action": "end_conversation"
+  },
+  {
+    "id": "price_range",
+    "description": "価格帯の質問検出",
+    "match": { "any_keywords": ["価格", "単価", "いくら", "値段"] },
+    "response": "ご検討の単価帯はどのくらいをお考えでしょうか？現在の仕入れ水準に合わせて最適な提案をいたします。",
+    "action": "ask_slot_price_range"
+  },
+  {
+    "id": "volume",
+    "description": "数量に関する質問検出",
+    "match": { "any_keywords": ["数量", "量", "どれくらい", "kg", "トン"] },
+    "response": "直近1ヶ月の仕入れ数量の目安を教えていただけますか？（例：月に500kgなど）",
+    "action": "ask_slot_purchase_volume"
+  },
+  {
+    "id": "appointment",
+    "description": "アポイント希望",
+    "match": { "any_keywords": ["アポ", "打ち合わせ", "日程", "面談", "予約"] },
+    "response": "ありがとうございます。ご都合の良い候補を2〜3ついただければ調整いたします。いつ頃がよろしいでしょうか？",
+    "action": "book_appointment"
+  },
+  {
+    "id": "thanks",
+    "description": "お礼・締め",
+    "match": { "any_keywords": ["ありがとう", "助かります", "助かった", "感謝"] },
+    "response": "こちらこそありがとうございます。引き続きよろしくお願いいたします。",
+    "action": "continue_conversation"
+  }
+]
+
+
+
+
